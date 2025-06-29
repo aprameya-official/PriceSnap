@@ -1,8 +1,11 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
 import { User, MapPin, Bell, Shield, CircleHelp as HelpCircle, Settings, ChevronRight, Target, Award, Wallet, LogOut, Moon, Sun, Monitor } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from '@/hooks/useTheme';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { router } from 'expo-router';
 
 interface UserStats {
   totalSavings: number;
@@ -11,18 +14,87 @@ interface UserStats {
   activeAlerts: number;
 }
 
-const userStats: UserStats = {
-  totalSavings: 1250,
-  comparisons: 187,
-  favoriteItems: 23,
-  activeAlerts: 8,
-};
+interface UserProfile {
+  full_name: string | null;
+  email: string;
+  location: string | null;
+}
 
 export default function ProfileScreen() {
   const { colors, theme, setTheme } = useTheme();
+  const { user, signOut } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
   const [locationSharing, setLocationSharing] = useState(true);
+  const [userStats, setUserStats] = useState<UserStats>({
+    totalSavings: 0,
+    comparisons: 0,
+    favoriteItems: 0,
+    activeAlerts: 0,
+  });
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    full_name: null,
+    email: '',
+    location: null,
+  });
+
+  useEffect(() => {
+    if (user) {
+      fetchUserProfile();
+      fetchUserStats();
+    }
+  }, [user]);
+
+  const fetchUserProfile = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name, email, location')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return;
+      }
+
+      if (data) {
+        setUserProfile(data);
+      }
+    } catch (error) {
+      console.error('Error in fetchUserProfile:', error);
+    }
+  };
+
+  const fetchUserStats = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_stats')
+        .select('total_savings, total_comparisons, active_favorites, active_alerts')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user stats:', error);
+        return;
+      }
+
+      if (data) {
+        setUserStats({
+          totalSavings: data.total_savings || 0,
+          comparisons: data.total_comparisons || 0,
+          favoriteItems: data.active_favorites || 0,
+          activeAlerts: data.active_alerts || 0,
+        });
+      }
+    } catch (error) {
+      console.error('Error in fetchUserStats:', error);
+    }
+  };
 
   const handleThemeChange = () => {
     const themes = ['light', 'dark', 'system'] as const;
@@ -30,6 +102,26 @@ export default function ProfileScreen() {
     const nextTheme = themes[(currentIndex + 1) % themes.length];
     setTheme(nextTheme);
     Alert.alert('Theme Changed', `Switched to ${nextTheme} mode`);
+  };
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await signOut();
+            if (!error) {
+              router.replace('/(auth)/login');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getThemeIcon = () => {
@@ -336,11 +428,15 @@ export default function ProfileScreen() {
               <User size={32} color="#FFFFFF" />
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.userName}>Rahul Sharma</Text>
-              <Text style={styles.userEmail}>rahul.sharma@email.com</Text>
+              <Text style={styles.userName}>
+                {userProfile.full_name || 'User'}
+              </Text>
+              <Text style={styles.userEmail}>{userProfile.email}</Text>
               <View style={styles.locationContainer}>
                 <MapPin size={14} color={colors.textSecondary} />
-                <Text style={styles.location}>Mumbai, Maharashtra</Text>
+                <Text style={styles.location}>
+                  {userProfile.location || 'Location not set'}
+                </Text>
               </View>
             </View>
           </View>
@@ -392,7 +488,7 @@ export default function ProfileScreen() {
             <View style={styles.achievementText}>
               <Text style={styles.achievementTitle}>Smart Shopper! 🎉</Text>
               <Text style={styles.achievementDescription}>
-                You've saved over ₹1000 this month by comparing prices
+                Welcome to PriceSnap! Start comparing prices to save money
               </Text>
             </View>
           </View>
@@ -484,10 +580,7 @@ export default function ProfileScreen() {
                 icon={<LogOut size={20} color={colors.error} />}
                 title="Sign Out"
                 subtitle="Sign out of your account"
-                onPress={() => Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Sign Out', style: 'destructive' }
-                ])}
+                onPress={handleSignOut}
               />
             </View>
           </View>
@@ -495,7 +588,7 @@ export default function ProfileScreen() {
 
         {/* App Info */}
         <View style={styles.appInfo}>
-          <Text style={styles.appInfoText}>PriceCompare India v1.0.0</Text>
+          <Text style={styles.appInfoText}>PriceSnap v1.0.0</Text>
           <Text style={styles.appInfoSubtext}>Made with ❤️ for smart shoppers</Text>
         </View>
       </ScrollView>

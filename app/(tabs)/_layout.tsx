@@ -1,10 +1,22 @@
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { Chrome as Home, Search, Heart, User, ShoppingBag } from 'lucide-react-native';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function TabLayout() {
   const { colors } = useTheme();
+  const { user, loading } = useAuth();
+
+  // Show loading state while checking authentication
+  if (loading) {
+    return null;
+  }
+
+  // Redirect to login if not authenticated
+  if (!user) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   const styles = StyleSheet.create({
     tabBar: {
